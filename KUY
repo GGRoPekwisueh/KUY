@@ -1,0 +1,187 @@
+-- โหลด Rayfield UI
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "Galaxy Block - Pro Hub (Full)",
+    Icon = 0,
+    LoadingTitle = "กำลังโหลดระบบ...",
+    Theme = "Ocean",
+    DisableRayfieldPrompts = false,
+})
+
+-- Tabs
+local MainTab = Window:CreateTab("ฟาร์ม & วิ่ง", 4483362458)
+local MiscTab = Window:CreateTab("บิน & หายตัว", 4483362458)
+local ESPTab = Window:CreateTab("ESP (มองทะลุ)", 4483362458)
+local CombatTab = Window:CreateTab("Combat (ล็อคหัว)", 4483362458)
+
+-- Services
+local RS = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local LP = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- Variables
+local SpawnEvent = RS:FindFirstChild("Spawn Galaxy Block")
+local autoFarm, speed, flying, flySpeed, invisible = false, 16, false, 50, false
+local espBox, espTracer = false, false
+local aimbotEnabled = false
+local espObjects = {}
+
+---------------------------------------------------------
+-- TAB 1: ฟาร์ม & วิ่ง
+---------------------------------------------------------
+MainTab:CreateToggle({
+    Name = "Auto Farm (เสกของ)",
+    CurrentValue = false,
+    Callback = function(v)
+        autoFarm = v
+        task.spawn(function()
+            while autoFarm do
+                if SpawnEvent then SpawnEvent:FireServer() end
+                task.wait(0.5)
+            end
+        end)
+    end,
+})
+
+MainTab:CreateSlider({
+    Name = "ความเร็วการวิ่ง",
+    Range = {16, 200},
+    CurrentValue = 16,
+    Callback = function(v) speed = v end,
+})
+
+RunService.RenderStepped:Connect(function()
+    if LP.Character and LP.Character:FindFirstChild("Humanoid") then
+        LP.Character.Humanoid.WalkSpeed = speed
+    end
+end)
+
+---------------------------------------------------------
+-- TAB 2: บิน & หายตัว
+---------------------------------------------------------
+local flyBody, flyGyro
+
+MiscTab:CreateToggle({
+    Name = "เปิด / ปิด บิน",
+    CurrentValue = false,
+    Callback = function(v)
+        flying = v
+        local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+        if flying then
+            LP.Character.Humanoid.PlatformStand = true
+            flyBody = Instance.new("BodyVelocity", hrp)
+            flyBody.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+            flyGyro = Instance.new("BodyGyro", hrp)
+            flyGyro.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+        else
+            LP.Character.Humanoid.PlatformStand = false
+            if flyBody then flyBody:Destroy() end
+            if flyGyro then flyGyro:Destroy() end
+        end
+    end,
+})
+
+RunService.RenderStepped:Connect(function()
+    if flying and LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") then
+        flyGyro.CFrame = Camera.CFrame
+        local dir = Vector3.zero
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir += Camera.CFrame.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir -= Camera.CFrame.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir -= Camera.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir += Camera.CFrame.RightVector end
+        flyBody.Velocity = dir * flySpeed
+    end
+end)
+
+MiscTab:CreateToggle({
+    Name = "เปิด / ปิด หายตัว",
+    CurrentValue = false,
+    Callback = function(v)
+        invisible = v
+        for _, p in pairs(LP.Character:GetDescendants()) do
+            if p:IsA("BasePart") then p.Transparency = (invisible and 1 or 0) end
+        end
+    end,
+})
+
+---------------------------------------------------------
+-- TAB 3: ESP
+---------------------------------------------------------
+ESPTab:CreateToggle({ Name = "เปิด / ปิด Box ESP (สีขาว)", CurrentValue = false, Callback = function(v) espBox = v end })
+ESPTab:CreateToggle({ Name = "เปิด / ปิด Tracer ESP (สีขาว)", CurrentValue = false, Callback = function(v) espTracer = v end })
+
+RunService.RenderStepped:Connect(function()
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LP and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            if not espObjects[player.Name] then
+                local box = Drawing.new("Square")
+                box.Thickness = 1
+                box.Color = Color3.fromRGB(255, 255, 255)
+                box.Filled = false
+                local line = Drawing.new("Line")
+                line.Thickness = 1
+                line.Color = Color3.fromRGB(255, 255, 255)
+                espObjects[player.Name] = {box = box, line = line}
+            end
+            local pos, onScreen = Camera:WorldToViewportPoint(player.Character.HumanoidRootPart.Position)
+            local objs = espObjects[player.Name]
+            if onScreen and (espBox or espTracer) then
+                if espBox then
+                    objs.box.Size = Vector2.new(1000 / pos.Z, 1200 / pos.Z)
+                    objs.box.Position = Vector2.new(pos.X - objs.box.Size.X / 2, pos.Y - objs.box.Size.Y / 2)
+                    objs.box.Visible = true
+                else objs.box.Visible = false end
+                if espTracer then
+                    objs.line.From = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y)
+                    objs.line.To = Vector2.new(pos.X, pos.Y)
+                    objs.line.Visible = true
+                else objs.line.Visible = false end
+            else
+                objs.box.Visible = false
+                objs.line.Visible = false
+            end
+        elseif espObjects[player.Name] then
+            espObjects[player.Name].box:Remove()
+            espObjects[player.Name].line:Remove()
+            espObjects[player.Name] = nil
+        end
+    end
+end)
+
+---------------------------------------------------------
+-- TAB 4: Aimbot (ล็อคหัว)
+---------------------------------------------------------
+CombatTab:CreateToggle({ Name = "เปิด / ปิด Aimbot (ล็อคหัว)", CurrentValue = false, Callback = function(v) aimbotEnabled = v end })
+
+local function getClosestPlayer()
+    local closestPlayer = nil
+    local shortestDistance = math.huge
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LP and player.Character and player.Character:FindFirstChild("Head") then
+            local pos, onScreen = Camera:WorldToViewportPoint(player.Character.Head.Position)
+            if onScreen then
+                local dist = (Vector2.new(pos.X, pos.Y) - Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)).Magnitude
+                if dist < shortestDistance then
+                    closestPlayer = player
+                    shortestDistance = dist
+                end
+            end
+        end
+    end
+    return closestPlayer
+end
+
+RunService.RenderStepped:Connect(function()
+    if aimbotEnabled then
+        local target = getClosestPlayer()
+        if target and target.Character:FindFirstChild("Head") then
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Character.Head.Position)
+        end
+    end
+end)
+
+Rayfield:Notify({Title = "สำเร็จ!", Content = "โหลดระบบครบถ้วนรวมถึง Aimbot เรียบร้อยครับ", Duration = 3})
